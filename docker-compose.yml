@@ -1,0 +1,71 @@
+version: '3.2'
+services:
+
+  blackbox:
+    image: prom/blackbox-exporter:latest
+    ports:
+    - 9115:9115
+    command:
+    - --config.file=/etc/blackbox/blackbox.yml
+    volumes:
+    - ./blackbox/blackbox.yml:/etc/blackbox/blackbox.yml
+    depends_on:
+    - web
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+    - 9090:9090
+    command:
+    - --config.file=/etc/prometheus/prometheus.yml
+    volumes:
+    - ./prometheus/:/etc/prometheus/
+    depends_on:
+    - blackbox
+    - alertmanager
+
+  web:
+    build:
+      context: redis-app/Docker
+    environment:
+      REDIS_HOST: redis
+    ports:
+    - 5000:5000
+    depends_on:
+    - redis
+
+  redis:
+    image: redis:latest
+    ports:
+      - 6379:6379
+
+  grafana:
+    image: grafana/grafana-enterprise
+    environment:
+      - GF_LOG_LEVEL=error
+      - SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    ports:
+      - '3000:3000'
+    volumes:
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+      - grafana_storage:/var/lib/grafana
+    depends_on:
+    - blackbox
+    - prometheus
+
+  alertmanager:
+    image: prom/alertmanager:v0.23.0
+    ports:
+      - 9093:9093
+    volumes:
+      - "./alertmanager:/config"
+      - alertmanager-data:/data
+    depends_on:
+    - blackbox
+    command: --config.file=/config/alertmanager.yml --log.level=debug
+
+volumes:
+  alertmanager-data: {}
+  grafana_storage: {}
